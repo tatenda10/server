@@ -6,9 +6,9 @@ const connection = mysql2.createPool({
   host: process.env.DB_HOST, // No default value, must be provided in .env
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
+  port:process.env.PORT,
   database: process.env.DB_DATABASE,
-  port :'25060',
-  waitForConnections: true,
+  waitForConnections: true, 
   connectionLimit: 10,
   queueLimit: 0,
 });

@@ -2,11 +2,17 @@ const express = require('express');
 const bodyParser = require('body-parser'); 
 const cors = require('cors'); // Import the cors package
 require('dotenv').config(); 
+const path = require('path'); // Import path module to serve static files
 
 const app = express();
 
 app.use(bodyParser.json());
 app.use(cors()); // Use cors middleware
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve .docx files from the "service_providers" directory
+app.use('/scheme_books', express.static(path.join(__dirname, 'scheme_books')));
 
 const searchstudent = require('./routes/students/searchStudent')
 const getstudent = require('./routes/students/Getstudent');
@@ -37,6 +43,9 @@ const Utilities = require('./routes/Utilities/Utility')
 const Dashboard = require('./routes/Utilities/dashboardRoutes')
 const ResetClasses = require('./routes/classes/ResetClasses')
 const Suggestions = require('./routes/suggestions/Suggestions')
+const registrations = require('./routes/financials/Registrations')
+const SchemeBooks = require('./routes/schemebooks/SchemeBooks')
+const StudentBalance = require('./routes/financials/UpdateBalance')
 
 
 app.use('/createstudent', students); 
@@ -91,8 +100,14 @@ app.use('/edit-invoice',EditInvoice)
 app.use('/dashboard',Dashboard)
 
 app.use('/reset-classes',ResetClasses)
-
 app.use('/suggestions',Suggestions)
+
+app.use('/registrations',registrations)
+
+app.use('/',SchemeBooks)
+
+app.use('/', StudentBalance); 
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

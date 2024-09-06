@@ -1,12 +1,15 @@
 const db = require('../../db/db');
 
 const addAnnouncement = async (req, res) => {
-  const { Target, Date, Description } = req.body;
+  const { Target, Date: announcementDate, Description } = req.body;
+
+  // Format the date to 'YYYY-MM-DD'
+  const formattedDate = new Date(announcementDate).toISOString().split('T')[0];
 
   try {
     await db.query(
       'INSERT INTO announcements (Target, Date, Description) VALUES (?, ?, ?)',
-      [Target, Date, Description]
+      [Target, formattedDate, Description]
     );
     res.status(201).json({ message: 'Announcement added successfully' });
   } catch (error) {
@@ -17,12 +20,15 @@ const addAnnouncement = async (req, res) => {
 
 const editAnnouncement = async (req, res) => {
   const { AnnouncementID } = req.params;
-  const { Target, Date, Description } = req.body;
+  const { Target, Date: announcementDate, Description } = req.body;
+
+  // Format the date to 'YYYY-MM-DD'
+  const formattedDate = new Date(announcementDate).toISOString().split('T')[0];
 
   try {
     await db.query(
       'UPDATE announcements SET Target = ?, Date = ?, Description = ? WHERE AnnouncementID = ?',
-      [Target, Date, Description, AnnouncementID]
+      [Target, formattedDate, Description, AnnouncementID]
     );
     res.status(200).json({ message: 'Announcement updated successfully' });
   } catch (error) {
@@ -55,7 +61,6 @@ const getAllAnnouncements = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch announcements' });
   }
 };
-
 
 module.exports = {
   addAnnouncement,

@@ -23,9 +23,33 @@ const createCashPayment = async (req, res) => {
             return res.status(400).json({ message: 'The student registration number did not match any records. Please check the registration number and try again.' });
         }
 
+        // Check if the student is in the new_students table
+        const [newStudent] = await db.query(`
+            SELECT * FROM new_students WHERE reg_number = ?
+        `, [reg_number]);
+
+        let registrationAmount = 0;
+        if (newStudent.length > 0) {
+            // Fetch the registration fees for the student's form
+            const formRange = newStudent[0].form <= 4 ? 'Form 1-4' : 'Form 5-6';
+            const [registrationFees] = await db.query(`
+                SELECT amount FROM registrations WHERE form_range = ?
+            `, [formRange]);
+
+            if (registrationFees.length > 0) {
+                registrationAmount = parseInt(registrationFees[0].amount, 10); // Convert the fetched amount to an integer
+                console.log(`Registration amount for ${formRange} (as integer): ${registrationAmount}`);
+            } else {
+                console.log(`No registration amount found for ${formRange}`);
+            }
+        }
+
         // Fetch the invoice for the specified term
         const invoice = await getInvoice(class_type, form, year, term);
         if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
+
+        // Ensure the invoice total is treated as a float to avoid string concatenation
+        invoice.total_amount = parseFloat(invoice.total_amount);
 
         // Check if the term is already fully paid before proceeding
         const [existingBalance] = await db.query(`
@@ -35,8 +59,8 @@ const createCashPayment = async (req, res) => {
 
         if (existingBalance.length > 0) {
             const { balance, balance_type } = existingBalance[0];
-            if (balance => 0 && balance_type === 'CR') {
-                return res.status(400).json({ message: 'Fees for this term is already paid in full. No further payment is needed.' });
+            if (balance >= 0 && balance_type === 'CR') {
+                return res.status(400).json({ message: 'Fees for this term are already paid in full. No further payment is needed.' });
             }
         }
 
@@ -44,15 +68,22 @@ const createCashPayment = async (req, res) => {
         const hasMedicalAid = await checkStudentMedicalAid(reg_number);
         if (hasMedicalAid) {
             const medicalAidAmount = await getMedicalAidAmount();
-            invoice.total_amount += medicalAidAmount;
+            invoice.total_amount += parseFloat(medicalAidAmount); // Ensure the medical aid amount is added as a number
+        }
+
+        // Add the registration fee for new students (in integer format)
+        if (registrationAmount > 0) {
+            invoice.total_amount += registrationAmount; // Correctly add as an integer to float
+            console.log(`Invoice total after adding registration fee (integer): ${invoice.total_amount}`);
         }
 
         let reportedAmount = amount_paid;
 
-        // If the payment is in ZIG, convert to USD and check limits
+        // If the payment is in ZIG, convert the amount_paid to USD and check limits
         if (currency === 'ZIG') {
             const exchangeRate = await getLatestExchangeRate();
             reportedAmount = amount_paid / exchangeRate; // Convert ZIG to USD
+            console.log(`Converted amount from ZIG to USD: ${reportedAmount}`);
 
             // Check if ZIG payments exceed the allowed limit
             const exceeded = await checkZIGPaymentLimit(reg_number, class_type, form, year, term, reportedAmount, invoice.total_amount, invoice.rtgs_percentage);
@@ -79,6 +110,11 @@ const createCashPayment = async (req, res) => {
         `, [reg_number, class_type, form, year, term, amount_paid, reportedAmount, currency, finalPaymentReference]);
 
         const paymentId = paymentResult.insertId;
+        //
+        // Delete the student from new_students table after successful payment
+        if (newStudent.length > 0) {
+            await db.query(`DELETE FROM new_students WHERE reg_number = ?`, [reg_number]);
+        }
 
         res.status(201).json({ 
             message: 'Cash payment successful', 

@@ -108,7 +108,105 @@ const deleteStudent = async (req, res) => {
   }
 };
 
+const addNewStudent = async (req, res) => {
+  const { regNumber, form, year } = req.body;
+
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // Check if the student exists in the 'students' table
+    const [existingStudent] = await connection.query(`
+      SELECT * FROM students WHERE RegNumber = ?
+    `, [regNumber]);
+
+    if (existingStudent.length === 0) {
+      // If the student doesn't exist, return an error
+      await connection.rollback();
+      return res.status(400).json({ message: 'Student has to be registered first before being marked as new student.' });
+    }
+
+    // Insert the new student into the 'New_students' table
+    const newStudentQuery = `
+      INSERT INTO New_students (reg_number, form, year, created_at)
+      VALUES (?, ?, ?, NOW())
+    `;
+    const newStudentValues = [regNumber, form, year];
+
+    const [newStudentResult] = await connection.query(newStudentQuery, newStudentValues);
+    const newStudentId = newStudentResult.insertId;
+
+    await connection.commit();
+    res.status(201).json({ newStudentId, message: 'New student added successfully' });
+  } catch (err) {
+    await connection.rollback();
+    console.error('Error adding new student: ', err);
+    res.status(500).json({ error: 'Failed to add new student' });
+  } finally {
+    connection.release();
+  }
+};
+
+const deleteNewStudent = async (req, res) => {
+  const { regNumber } = req.params;
+  try {
+    await db.query('DELETE FROM New_students WHERE reg_number = ?', [regNumber]);
+    res.status(200).json({ message: 'New student deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting new student:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+
+const getNewStudents = async (req, res) => {
+  try {
+    // Fetch all records from New_students table
+    const [newStudents] = await db.query(`
+      SELECT * FROM New_students
+    `);
+
+    // If there are no new students, return an empty array
+    if (newStudents.length === 0) {
+      return res.status(200).json({ message: 'No new students found', data: [] });
+    }
+
+    // For each new student, get the Name and Surname from the students table
+    const results = await Promise.all(
+      newStudents.map(async (newStudent) => {
+        const [studentInfo] = await db.query(`
+          SELECT Name, Surname FROM students WHERE RegNumber = ?
+        `, [newStudent.reg_number]);
+
+        // Append the Name and Surname to the new student's data
+        if (studentInfo.length > 0) {
+          return {
+            ...newStudent,
+            name: studentInfo[0].Name,
+            surname: studentInfo[0].Surname
+          };
+        } else {
+          return {
+            ...newStudent,
+            name: 'Unknown', // If student data is missing, use placeholder
+            surname: 'Unknown'
+          };
+        }
+      })
+    );
+
+    res.status(200).json({ message: 'New students retrieved successfully', data: results });
+  } catch (error) {
+    console.error('Error retrieving new students:', error);
+    res.status(500).json({ error: 'Failed to retrieve new students' });
+  }
+};
+
+
 module.exports = {
   addStudentWithGuardianAndBalance,
-  deleteStudent
+  deleteStudent,
+  addNewStudent,
+  deleteNewStudent,
+  getNewStudents
 };

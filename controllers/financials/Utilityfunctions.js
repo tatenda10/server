@@ -108,6 +108,11 @@ async function updateStudentBalance(reg_number, class_type, form, year, term, re
             throw new Error('Invoice for this term is already fully paid.');
         }
 
+        // Delete any existing records for the same reg_number to avoid duplication
+        await db.query(`
+            DELETE FROM balances WHERE reg_number = ?
+        `, [reg_number]);
+
         // Update or insert the balance for the current term
         if (existingCurrentBalance) {
             await db.query(`
@@ -130,6 +135,7 @@ async function updateStudentBalance(reg_number, class_type, form, year, term, re
         throw error;
     }
 }
+
 
 
 
